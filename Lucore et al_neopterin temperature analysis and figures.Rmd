@@ -785,3 +785,245 @@ print(m_table, preview = "docx")
 
 
 ```
+
+
+# 7 Max temp time interval analysis
+
+Shows that average maximum 15 days before sample collection is the best fitting time interval for the neopterin data. 
+
+## 7a. Prep data
+
+```{r}
+
+# load weather data
+w <- read_csv("data/paloverde_weather.csv")
+
+# prep data 
+n_test <- n2 %>% 
+  mutate(date = mdy(date)) %>%
+  mutate(days5 = date - days(5),
+         days7 = date - days(7),
+         days9 = date - days(9),
+         days10 = date - days(10),
+         days11 = date - days(11),
+         days12 = date - days(12),
+         days13 = date - days(13),
+         days14 = date - weeks(2),
+         days15 = date - days(15),
+         days16 = date - days(16),
+         days17 = date - days(17),
+         days18 = date - days(18),
+         days19 = date - days(19),
+         days20 = date - days(20),
+         days21 = date - weeks(3),
+         days28 = date - weeks(4),
+         days35 = date - weeks(6))
+
+# Expand the date range for each sample
+d1 <- n_test %>%
+  select(c(sample, date, days5:days35)) %>%
+  pivot_longer(cols = starts_with("days"),
+               names_to = "time_window",
+               values_to = "window_date")
+
+# Explode the date range
+date_range <- d1 %>%
+  rowwise() %>%
+  mutate(date_range = list(seq(window_date, date, by = "day")))
+
+# Explode the date range
+exploded_dates <- date_range %>%
+  tidyr::unnest(date_range)
+
+# make common ID in weather data
+w <- w %>%
+  mutate(date_range = date)
+
+# Merge with temperature data
+merged_df <- exploded_dates %>%
+  left_join(w, by = 'date_range', relationship = "many-to-many")
+
+# Calculate mean temperature for each sample
+result_df <- merged_df %>%
+  group_by(sample, time_window) %>%
+  summarise(mean_max_t = mean(max_t, na.rm = TRUE))
+
+#pivot_wider to make the means variables 
+temp_averages <- result_df %>%
+  pivot_wider(names_from = time_window, values_from = mean_max_t)
+
+#join with neopterin data
+n_interval <- n2 %>%
+  left_join(temp_averages, by = "sample") 
+
+# scale variables 
+n_interval2  <- n_interval  %>%
+  mutate(days5_s = my_scale(days5),
+         days7_s = my_scale(days7),
+         days9_s = my_scale(days9),
+         days10_s = my_scale(days10),
+         days11_s = my_scale(days11),
+         days12_s = my_scale(days12),
+         days13_s = my_scale(days13),
+         days14_s = my_scale(days14),
+         days15_s = my_scale(days15),
+         days16_s = my_scale(days16),
+         days17_s = my_scale(days17),
+         days18_s = my_scale(days18),
+         days19_s = my_scale(days19),
+         days20_s = my_scale(days20),
+         days21_s = my_scale(days21),
+         days28_s = my_scale(days28),
+         days35_s = my_scale(days35),
+         age_s = my_scale(age),
+         ID = as.factor(ID),
+         group = as.factor(group))
+
+```
+
+## 7b. Build and compare models
+
+timeline 15, 16, and 14 days fits best
+
+```{r}
+
+# day 5
+g5 <- gam(neo_nmol_SG ~ s(age_s) + group + s(days5_s) + s(ID, bs = "re"),
+             data = n_interval2,
+             method = "REML",
+             family = Gamma(link = "log"))
+
+# day 7
+g7 <- gam(neo_nmol_SG ~ s(age_s) + group + s(days7_s) + s(ID, bs = "re"),
+             data = n_interval2,
+             method = "REML",
+             family = Gamma(link = "log"))
+
+# day 9
+g9 <- gam(neo_nmol_SG ~ s(age_s) + group + s(days9_s) + s(ID, bs = "re"),
+             data = n_interval2,
+             method = "REML",
+             family = Gamma(link = "log"))
+
+# day 10
+g10 <- gam(neo_nmol_SG ~ s(age_s) + group + s(days10_s) + s(ID, bs = "re"),
+             data = n_interval2,
+             method = "REML",
+             family = Gamma(link = "log"))
+
+# day 11
+g11 <- gam(neo_nmol_SG ~ s(age_s) + group + s(days11_s) + s(ID, bs = "re"),
+             data = n_interval2,
+             method = "REML",
+             family = Gamma(link = "log"))
+
+# day 12
+g12 <- gam(neo_nmol_SG ~ s(age_s) + group + s(days12_s) + s(ID, bs = "re"),
+             data = n_interval2,
+             method = "REML",
+             family = Gamma(link = "log"))
+
+# day 13
+g13 <- gam(neo_nmol_SG ~ s(age_s) + group + s(days13_s) + s(ID, bs = "re"),
+             data = n_interval2,
+             method = "REML",
+             family = Gamma(link = "log"))
+
+# day 14
+g14 <- gam(neo_nmol_SG ~ s(age_s) + group + s(days14_s) + s(ID, bs = "re"),
+             data = n_interval2,
+             method = "REML",
+             family = Gamma(link = "log"))
+
+# day 15
+g15 <- gam(neo_nmol_SG ~ s(age_s) + group + s(days15_s) + s(ID, bs = "re"),
+             data = n_interval2,
+             method = "REML",
+             family = Gamma(link = "log"))
+
+# day 16
+g16 <- gam(neo_nmol_SG ~ s(age_s) + group + s(days16_s) + s(ID, bs = "re"),
+             data = n_interval2,
+             method = "REML",
+             family = Gamma(link = "log"))
+
+# day 17
+g17 <- gam(neo_nmol_SG ~ s(age_s) + group + s(days17_s) + s(ID, bs = "re"),
+             data = n_interval2,
+             method = "REML",
+             family = Gamma(link = "log"))
+
+# day 18
+g18 <- gam(neo_nmol_SG ~ s(age_s) + group + s(days18_s) + s(ID, bs = "re"),
+             data = n_interval2,
+             method = "REML",
+             family = Gamma(link = "log"))
+
+# day 19
+g19 <- gam(neo_nmol_SG ~ s(age_s) + group + s(days19_s) + s(ID, bs = "re"),
+             data = n_interval2,
+             method = "REML",
+             family = Gamma(link = "log"))
+
+# day 20
+g20 <- gam(neo_nmol_SG ~ s(age_s) + group + s(days20_s) + s(ID, bs = "re"),
+             data = n_interval2,
+             method = "REML",
+             family = Gamma(link = "log"))
+
+# day 21
+g21 <- gam(neo_nmol_SG ~ s(age_s) + group + s(days21_s) + s(ID, bs = "re"),
+             data = n_interval2,
+             method = "REML",
+             family = Gamma(link = "log"))
+
+# day 28
+g28 <- gam(neo_nmol_SG ~ s(age_s) + group + s(days28_s) + s(ID, bs = "re"),
+             data = n_interval2,
+             method = "REML",
+             family = Gamma(link = "log"))
+
+# day 35
+g35 <- gam(neo_nmol_SG ~ s(age_s) + group + s(days35_s) + s(ID, bs = "re"),
+             data = n_interval2,
+             method = "REML",
+             family = Gamma(link = "log"))
+
+
+AICtab(g5, g7, g9, g10, g11, g12, g13, g14, g15, g16, g17, g18, g19, g20, g21, g28, g35, weights = TRUE)
+
+AICctab(g5, g7, g9, g10, g11, g12, g13, g14, g15, g16, g17, g18, g19, g20, g21, g28, g35, weights = TRUE)
+
+```
+
+## 7c. Plot best fitting models
+
+all show a decrease at high temps
+
+```{r}
+
+plot15 <- draw(g15, 
+     select = 2,
+     rug= FALSE)
+
+plot16 <- draw(g16, 
+     select = 2, 
+     rug= FALSE)
+
+plot14 <- draw(g14, 
+     select = 2, 
+     rug= FALSE)
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
