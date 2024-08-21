@@ -10,7 +10,7 @@ All code and data needed to run the analysis and create the figures for Lucore e
    c. These materials should take no more than 10 minutes to install on a normal desktop computer
 3. Demo
    a. To run the materials, first open R or R Studio, then, open the .Rmd file named "Lucore et al_neopterin temperature analysis and figures" and download the following .csv files to your home directory: "2024-05-09_compiled_neopterin", "MERRA2_maxt", "paloverde_weather"
-   b. Now, open the .Rmd file, you will need to change the file paths on lines 27-39, and 799 to reflect the location of your home directory where you have downloaded the .csv files.
+   b. Now, open the .Rmd file, you will need to change the file paths on lines 31-42 to reflect the location of your home directory where you have downloaded the .csv files.
    c. After changing the file paths, run the code chunks and recreate the analysis and figures reflected in the manuscript.
    d. These materials should take no more than 15 minutes to run on a normal desktop computer
 4. Instructions for use
