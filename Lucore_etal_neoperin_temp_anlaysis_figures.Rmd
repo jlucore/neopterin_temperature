@@ -1,0 +1,1008 @@
+---
+title: "2025-07-25_reviewer_changes"
+author: "Lucore"
+date: "2024-07-25"
+output: html_document
+---
+
+# Notes 
+
+Up to date code for neopterin manuscriptpost reviews from Science Advances. 
+
+# Load environment
+
+```{r}
+
+#libraries
+library(tidyverse)
+library(lme4)
+library(bbmle)
+library(mgcv)
+library(broom.mixed)
+library(cowplot)
+library(sjPlot)
+library(gratia)
+library(ggpubr)
+library(MuMIn)
+library(ggiraph)
+library(flextable)
+
+
+n <- read_csv("data/2024-07-25_compiled_neopterin.csv")
+
+m <- read_csv("data/MERRA2_maxt.csv")
+
+# functions
+source("functions/my_scale.R")
+
+source("functions/extract_model_info.R")
+
+source("functions/plot_theme.R")
+
+source("functions/temp_bar.R")
+
+```
+
+# 1. Prep data
+
+## 1a. remove outliers
+
+```{r}
+
+# Define mean and standard deviation
+mean <- mean(n$neo_nmol_SG)
+
+std_dev <- sd(n$neo_nmol_SG)  
+
+# Calculate 2 standard deviations above the mean
+value_2std_above_mean <- mean + (4 * std_dev)
+
+# Filter samples
+n1 <- n %>%
+  filter(neo_nmol_SG <= value_2std_above_mean) %>%
+  filter(ID != "TET")
+
+```
+
+
+# 2. Choose best fitting temp time interval 
+
+Min and max temp show the same trends, average temp 15 days before sample collection is the best fitting time interval. Min and Max temperature show the same shape. 
+
+## 2a. Prep data
+
+```{r}
+
+n_temp <- n1 %>%
+  filter(!is.na(max_t_days1)) %>% # remove days whens theres no temp observation, only for model compairson purposes
+  mutate(across(c(max_t_days1:rain_days4, age), my_scale, .names = "{.col}_s"),
+         ID = as.factor(ID),
+         group = as.factor(group))
+
+```
+
+## 2b. Evaluate best max temp interval 
+
+Max temp averages 15days before sample collection is the best fitting time interval. 
+
+```{r}
+
+# List of variables to iterate over
+variables <- c("max_t_days1_s", "max_t_days10_s", "max_t_days11_s", "max_t_days12_s", "max_t_days13_s", "max_t_days14_s", "max_t_days15_s", "max_t_days16_s", "max_t_days17_s", "max_t_days18_s", "max_t_days19_s", "max_t_days2_s", "max_t_days20_s", "max_t_days21_s", "max_t_days28_s", "max_t_days3_s", "max_t_days35_s", "max_t_days5_s",  "max_t_days7_s", "max_t_days9_s")
+
+# Initialize a list to store the models
+models <- list()
+plots <- list()
+
+# Loop through each variable, build the model, and store it in the list
+for (var in variables) {
+  model_name <- paste0("g_", gsub("_s", "", var))
+  formula <- as.formula(paste("neo_nmol_SG ~ s(age_s) + group + s(", var, ") + s(ID, bs = 're')"))
+  models[[model_name]] <- gam(formula, data = n_temp, method = "REML", family = Gamma(link = "log"))
+  
+  plots[[model_name]] <- plot(models[[model_name]], select = 2, rug = FALSE)
+}
+
+# Extract model names
+model_names <- names(models)
+
+# Print summary of each model
+lapply(models, summary)
+
+# Create AIC table
+max_aic_results <- AICctab(models, weights = TRUE)
+
+# Print AIC table
+print(max_aic_results)  
+
+# Print model plots
+for (model_name in model_names) {
+  print(plots[[model_name]])
+}
+
+```
+
+
+## 2c. Evaluate best min temp interval  
+
+Min temp averages 15days before sample collection is the best fitting time interval.
+
+```{r}
+
+# List of variables to iterate over
+variables <- c("min_t_days1_s", "min_t_days10_s", "min_t_days11_s", "min_t_days12_s", "min_t_days13_s", "min_t_days14_s", "min_t_days15_s", "min_t_days16_s", "min_t_days17_s", "min_t_days18_s", "min_t_days19_s", "min_t_days2_s", "min_t_days20_s", "min_t_days21_s", "min_t_days28_s", "min_t_days3_s", "min_t_days35_s", "min_t_days5_s",  "min_t_days7_s", "min_t_days9_s")
+
+# Initialize a list to store the models
+models <- list()
+plots <- list()
+
+# Loop through each variable, build the model, and store it in the list
+for (var in variables) {
+  model_name <- paste0("g_", gsub("_s", "", var))
+  formula <- as.formula(paste("neo_nmol_SG ~ s(age_s) + group + s(", var, ") + s(ID, bs = 're')"))
+  models[[model_name]] <- gam(formula, data = n_temp, method = "REML", family = Gamma(link = "log"))
+  
+  plots[[model_name]] <- plot(models[[model_name]], select = 2, rug = FALSE)
+  
+}
+
+# Extract model names
+model_names <- names(models)
+
+# Print summary of each model
+lapply(models, summary)
+
+# Create AIC table
+min_aic_results <- AICctab(models, weights = TRUE)
+
+# Print AIC table
+print(min_aic_results) 
+
+# Print model plots
+for (model_name in model_names) {
+  print(plots[[model_name]])
+}
+
+```
+
+## 2c. Compare results for min and max temp 
+### 2c i. Build models outside of loop
+
+Creates figure S1
+
+```{r}
+
+g_min_15 <- gam(neo_nmol_SG ~ s(age_s) + group + s(min_t_days15_s) + s(ID, bs = "re"),
+             data = n_temp,
+             method = "REML",
+             family = Gamma(link = "log"))
+min_t_15 <- summary(g_min_15)
+min_t_15 
+
+min_plot15 <- draw(g_min_15, select = 2, rug= FALSE)
+min_plot <- min_plot15 +
+  labs(
+    x = "Average min temp scaled (°C)",
+    y = "Neopterin (ng/ml) partial effects") +
+  theme_minimal() +
+  theme(panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        axis.line = element_line(color = "black"),
+        axis.title.y = element_text(size = 25, face = "bold"),
+        axis.title.x = element_text(size = 25, face = "bold"),
+        axis.text = element_text(size = 23, color = "black"),
+        plot.title = element_blank()) 
+
+g_max_15 <- gam(neo_nmol_SG ~ s(age_s) + group + s(max_t_days15_s) + s(ID, bs = "re"),
+             data = n_temp,
+             method = "REML",
+             family = Gamma(link = "log"))
+max_t_15 <- summary(g_max_15)
+max_t_15 
+
+max_plot15 <- plot(g_max_15, 
+     select = 2, #selections 2nd smooth function
+     rug= FALSE)
+
+max_plot15 <- draw(g_max_15, select = 2, rug= FALSE)
+max_plot <- max_plot15 +
+  labs(
+    x = "Average max temp scaled (°C)",
+    y = " ") +
+  theme_minimal() +
+  theme(panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        axis.line = element_line(color = "black"),
+        axis.title.y = element_text(size = 25, face = "bold"),
+        axis.title.x = element_text(size = 25, face = "bold"),
+        axis.text = element_text(size = 23, color = "black"),
+        plot.title = element_blank()) 
+
+# combine plots side by side
+
+combined_plot <- ggarrange(min_plot, max_plot, ncol = 2)
+
+# save figure S1
+
+tiff(file= "figures/figure_S1", width=15, height=9, units="in", res=500)  
+
+combined_plot 
+
+dev.off()
+
+
+
+```
+
+### 2c ii. Compare AICc tables
+
+Creates table S4
+
+```{r}
+
+min_aic <- min_aic_results %>% # Create AIC tables 
+  as.data.frame() %>%
+  rownames_to_column() %>%
+  rename(min_t_model = rowname,
+         min_t_dAICc = dAICc,
+         min_t_weight = weight) %>%
+  mutate(min_t_model = str_replace(min_t_model, ".*_(days\\d+)", "\\1"),
+         min_t_dAICc = round(min_t_dAICc, 2),
+         min_t_weight = round(min_t_weight, 2)) %>%
+  select(-df)
+
+max_aic <- max_aic_results %>%
+  as.data.frame() %>%
+  rownames_to_column() %>%
+  rename(max_t_model = rowname,
+         max_t_dAICc = dAICc,
+         max_t_weight = weight) %>%
+  mutate(max_t_model = str_replace(max_t_model, ".*_(days\\d+)", "\\1"),
+         max_t_dAICc = round(max_t_dAICc, 2),
+         max_t_weight = round(max_t_weight, 2)) %>%
+  select(-df)
+
+# Make flex table
+aic <- min_aic %>% # bind aic tables
+  cbind(max_aic) %>%
+  flextable() %>%
+  vline(j = 3) %>%
+  bold(i = 1, part = "header")
+
+print(aic, preview = "docx")  
+
+
+```
+
+
+# 3. Neopterin: Generalized Additive Model (GAM)
+
+## 3a. Prep data
+
+```{r}
+
+# 1b scale variables # this needs to be changed for other parts of analysis 
+
+n2 <- n1 %>%
+  select(c(sample:repro, max_t_days15, min_t_days15, rain_days4)) %>%
+  mutate(across(c(max_t_days15:rain_days4, age), my_scale, .names = "{.col}_s"),
+         ID = as.factor(ID),
+         group = as.factor(group))
+  
+```
+
+
+## 3b. Build model
+
+```{r}
+
+m_gam <- gam(neo_nmol_SG ~ s(age_s) + group + s(max_t_days15_s) + s(ID, bs = "re"),
+             data = n2,
+             method = "REML",
+             family = Gamma(link = "log"))
+
+summary(m_gam)
+
+```
+
+
+## 3c. Plot: Figure 1
+
+```{r}
+
+plot1 <- draw(m_gam, 
+     select = 2, #selections 2nd smooth function
+     rug= FALSE) 
+
+glmm_1_temp <- plot1 + 
+  ggtitle(" ") +
+  xlab("Average max temp (°C)") +
+  ylab("Partial effects of neopterin (ng/mL)") +
+  theme_minimal() +
+  theme(panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        axis.line = element_line(color = "black", linewidth = .28),
+        axis.title.y = element_text(size = 8),
+        axis.title.x = element_text(size = 8),
+        axis.text = element_text(size = 8, color = "black"),
+        text = element_text(family = "sans")) +
+  geom_vline(xintercept = 0.7523, color = "#a6000e", linetype = "dashed", linewidth = .5) +
+  scale_x_continuous(breaks = c(-0.6866, -0.3286, 0.0344, 0.3862, 0.7523, 1.13308), 
+                     labels = c(26, 27, 28, 29, 30, 31))
+
+ggsave("figures/figure_1", plot = glmm_1_temp, device = "pdf", width=9, height=8, units = "cm", dpi = 1200, colormodel = "rgb")
+
+
+```
+
+
+# 4. Neopterin: Generalized Linear Mixed Models (GLMM's)
+
+## 4a. Build and compare models
+
+Added reproductive status, and rain into models. Rain controls for seasonality. Repro status also controls for sex because there is a Male variable
+
+```{r}
+
+glmm_0 <- glmer(neo_nmol_SG ~ group + poly(age_s, degree = 2) + rain_days4_s + repro + (1|ID),
+                data = n2,
+                family = Gamma(link = "log"))
+summary(glmm_0)
+
+glmm_1 <- glmer(neo_nmol_SG ~ group + poly(age_s, degree = 2) + rain_days4_s + repro + max_t_days15_s + (1|ID),
+                data = n2,
+                family = Gamma(link = "log"))
+summary(glmm_1)
+
+glmm_2 <- glmer(neo_nmol_SG ~ group + poly(age_s, degree = 2) * max_t_days15_s + rain_days4_s + repro + (1|ID),
+                data = n2,
+                family = Gamma(link = "log"))
+summary(glmm_2)
+
+AICctab(glmm_0, glmm_1, glmm_2, weights = TRUE)
+
+```
+
+## 4b. Average best fitting models
+
+```{r}
+
+glmm_avg <- model.avg(glmm_1, glmm_2)
+  
+glmm_avg <- as.data.frame(coef(glmm_avg ))
+
+AICctab(glmm_1, glmm_2, weights = TRUE)
+
+```
+
+## 4c. Plot: Figure 2
+
+```{r}
+
+# Assemble data for coef plot 
+# glmm_1
+
+merge_1 <- extract_model_info(glmm_1, conf_level_1 = 0.5, conf_level_2 = 0.95) %>%
+  mutate(model = "glmm_1")
+
+# glmm_2
+
+merge_2 <- extract_model_info(glmm_2, conf_level_1 = 0.5, conf_level_2 = 0.95) %>%
+  mutate(model = "glmm_2")
+
+# join model info and filter variables 
+
+models <- rbind(merge_1, merge_2) %>%
+  filter(term %in% c("poly(age_s, degree = 2)2", "max_t_days15_s", "poly(age_s, degree = 2)2:max_t_days15_s", 	
+"rain_days4_s"))
+
+# plot the models 
+
+coef_plot <- ggplot(models, aes(x = term, y = estimate, color = model)) +
+  geom_hline(yintercept = 0, linetype = "dashed", size = .5, color = "grey") +
+  geom_point(position = position_dodge(width = 0.3), size = 1) +
+  geom_linerange(aes(ymin = conf95.low, ymax = conf95.high),
+                 position = position_dodge(width = 0.3), linewidth = .35) +
+  geom_linerange(aes(ymin = conf50.low, ymax = conf50.high),
+                 position = position_dodge(width = 0.3), linewidth = .75) + 
+  scale_color_manual(values = c("#1b7837", "#762a83")) +
+  ylab("Estimate") +
+  coord_flip() +
+  theme_minimal() +
+  theme(axis.line = element_line(color = "black", linewidth = .28),
+              axis.text = element_text(size = 8, color = "black"), 
+              text = element_text(size = 8, color = "black", family = "sans"), 
+              panel.grid.minor = element_blank(),
+              panel.grid.major = element_blank(),
+              legend.position = "none",
+              axis.title.y = element_blank()) +
+  scale_x_discrete(breaks = c('poly(age_s, degree = 2)2:max_t_days15_s',  
+                              'poly(age_s, degree = 2)2', 
+                              "max_t_days15_s",
+                              "rain_days4_s"), 
+                    labels = c(expression("Age" ^2 * " * max temp"), 
+                               expression("Age"^2), 
+                               "Max temp",
+                               "Rain")) 
+                   
+# add custom legend
+
+coef_plot <- coef_plot +
+  annotate(geom = "point", x = 4, y = 2, shape = 16, size = 1, color = "#762a83") +
+  annotate(geom = "segment", x = 4, xend = 4, y = 1.7, yend = 2.3, size = .3, color = "#762a83") +
+  annotate(geom = "text", x = 4, y = 4.9, label = bquote("m2: " * Delta * "AIC = 0.0 " * omega * " =  0.975"), size = 1.7, family = "sans") +
+  
+  annotate(geom = "point", x = 3.7, y = 2, shape = 16, size = 1, color = "#1b7837") +
+  annotate(geom = "segment", x = 3.7, xend = 3.7, y = 1.7, yend = 2.3, size = .3, color = "#1b7837") +
+  annotate(geom = "text", x = 3.7, y = 4.9, label = bquote("m1: " * Delta * "AIC = 7.3 " * omega * " =  0.025"), size = 1.7, family = "sans") 
+  
+ggsave("figures/figure_2", plot = coef_plot, device = "pdf", width=9, height=5, units = "cm", dpi = 1200, colormodel = "rgb")
+
+
+```
+
+
+## 4d. Plot: Figure 3
+
+### 4d i. Prep data
+
+```{r}
+
+# Add predictions from best model
+n2$preds <- predict(glmm_2, type = "response")
+
+# create temp bins
+bin1 <- n2 %>% filter(max_t_days15 >= 25.5 & max_t_days15 <= 27)
+
+bin2 <- n2 %>% filter(max_t_days15 >= 27 & max_t_days15 <= 28.5)
+
+bin3 <- n2 %>% filter(max_t_days15 >= 28.5 & max_t_days15 <= 30)
+
+bin4 <- n2 %>% filter(max_t_days15 >= 30 & max_t_days15 <= 31.5)
+
+```
+
+### 4d ii. Make plots
+
+```{r}
+
+# plot each bin 
+plot_1 <- ggplot(bin1, aes(x = age, y = preds)) +
+  geom_point(color = "#e7ba8c", alpha = 0.4, size = 1) +
+  geom_smooth(aes(y = preds), method='lm', formula = y~poly(x,2), color = "#e7ba8c", linewidth = .5) +
+  ylim(0, 2300) +
+  scale_x_continuous(breaks = c(0, 10, 20), labels = c("0", "10", "20")) +
+  coord_cartesian(xlim = c(0, 25)) +
+  ylab("Neopterin (ng/mL)") +
+  theme(panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        panel.background = element_blank(),
+        axis.line = element_line(color = "black", linewidth = 0.28),
+        axis.title.x = element_blank(),
+        axis.text = element_text(size = 8, color = "black"),
+        axis.ticks = element_line(color = "black", linewidth = 0.28),
+        axis.ticks.length.y = unit(.1, "cm")) +
+  annotate("text", x = 3, y = 2300, label = "A", color = "black", size = 5, fontface = "bold", family = "sans")
+
+plot_2 <- ggplot(bin2, aes(x = age, y = preds)) +
+  geom_point(color = "#e9966a", alpha = 0.4, size = 1) +
+  geom_smooth(aes(y = preds), method='lm', formula = y~poly(x,2), color = "#e9966a", linewidth = .5) +
+  ylim(0, 2300) +
+  scale_x_continuous(breaks = c(0, 10, 20), labels = c("0", "10", "20")) +
+  coord_cartesian(xlim = c(0, 25)) +
+  plot_theme() +
+  annotate("text", x = 3, y = 2300, label = "B", color = "black", size = 5, fontface = "bold") 
+
+plot_3 <- ggplot(bin3, aes(x = age, y = preds)) +
+  geom_point(color = "#d9735a", alpha = 0.4, size = 1) +
+  geom_smooth(aes(y = preds), method='lm', formula = y~poly(x,2), color = "#d9735a", linewidth = .5) +
+  ylim(0, 2300) +
+  scale_x_continuous(breaks = c(0, 10, 20), labels = c("0", "10", "20")) +
+  coord_cartesian(xlim = c(0, 25)) +
+  plot_theme() +
+  annotate("text", x = 3, y = 2300, label = "C", color = "black", size = 5, fontface = "bold") 
+
+plot_4 <- ggplot(bin4, aes(x = age, y = preds)) +
+  geom_point(color = "#a6000e", alpha = 0.4, size = 1) +
+  geom_smooth(aes(y = preds), method='lm', formula = y~poly(x,2), color = "#a6000e", linewidth = .5) +
+  ylim(0, 2300) +
+  scale_x_continuous(breaks = c(0, 10, 20), labels = c("0", "10", "20")) +
+  coord_cartesian(xlim = c(0, 25)) +
+  plot_theme() +
+  annotate("text", x = 3, y = 2300, label = "D", color = "black", size = 5, fontface = "bold") 
+
+# plot overlapping trends
+
+plot_5 <- ggplot(bin4, aes(x = age, y = preds)) +
+  ylim(0, 2300) +
+  scale_x_continuous(breaks = c(0, 10, 20), labels = c("0", "10", "20")) +
+  coord_cartesian(xlim = c(0, 25)) +
+  geom_smooth(data = bin1, aes(y = preds), method='lm', formula = y~poly(x,2), color = "#e7ba8c", se = FALSE, linewidth = .5) +
+  geom_smooth(data = bin2, aes(y = preds), method='lm', formula = y~poly(x,2), color = "#e9966a", se = FALSE, linewidth = .5) +
+  geom_smooth(data = bin3, aes(y = preds), method='lm', formula = y~poly(x,2), color = "#d9735a", se = FALSE, linewidth = .5) +
+  geom_smooth(aes(y = preds), method='lm', formula = y~poly(x,2), color = "#a6000e", se = FALSE, linewidth = .5) +
+  plot_theme() +
+  annotate("text", x = 3, y = 2300, label = "E", color = "black", size = 5, fontface = "bold", family = "sans") 
+
+```
+
+### 4d iii. Make bars
+
+```{r}
+
+data <- data.frame(start = 1, end = 21.5)
+
+bar_1 <- temp_bar(data, "#e7ba8c", "25.5 - 27°C") +
+  theme(text = element_text(size = 8)) 
+  
+bar_2 <- temp_bar(data, "#e9966a", "27 - 28.5°C") 
+
+bar_3 <- temp_bar(data, "#d9735a", "28.5 - 30°C") 
+
+bar_4 <- temp_bar(data, "#a6000e", "30 - 31.5°C") 
+
+bar_5 <- temp_bar(data, "white", "")
+
+```
+
+### 4d iv. Combine plots 
+
+```{r}
+
+panel_1 <- ggarrange(bar_1, plot_1, nrow = 2, ncol = 1,
+                             heights = c(1,8),
+                 align = "v")
+
+panel_2 <- ggarrange(bar_2, plot_2, nrow = 2, ncol = 1,
+                             heights = c(1,8))
+
+panel_3 <- ggarrange(bar_3, plot_3, nrow = 2, ncol = 1,
+                             heights = c(1,8))
+
+panel_4 <- ggarrange(bar_4, plot_4, nrow = 2, ncol = 1,
+                             heights = c(1,8))
+
+panel_5 <- ggarrange(bar_5, plot_5, nrow = 2, ncol = 1,
+                             heights = c(1,8),
+                 align = "v")
+
+#combine plots 1-4
+p1 <- ggarrange(panel_1, panel_2, panel_3, panel_4, nrow = 1, ncol = 4,
+                align = "h",
+          widths = c(1, .73, .73, .73))
+
+fig <- ggarrange(p1, panel_5, nrow = 1, ncol = 2,
+          align = "h",
+          widths = c(1, 0.3)) +
+          theme(plot.margin = margin(0.1,0.1,0.8,0.1, "cm"))  
+
+
+fig_final <- annotate_figure(fig, fig.lab = "Age (years)",
+                fig.lab.size = 10,
+                fig.lab.pos = "bottom") +
+    theme(plot.margin = margin(0.1,0.1,0.1,0.1, "cm"))
+
+
+
+ggsave("figures/figure_3", plot = fig_final, device = "pdf", width=18.4, height=9.2, units = "cm", dpi = 1200, colormodel = "rgb")
+
+
+```
+
+
+# 5. Climate data: Linear mixed models (LMM's) 
+
+## 5a. Standardize climate data
+
+```{r}
+
+# clean MERRA data 
+m1 <- m %>%
+  select(c(Temperature, Date)) %>%
+  rename(temp = Temperature,
+         date = Date) %>%
+  mutate(temp = temp - 273.15,
+         date = ymd(date),
+         month = month(date),
+         year = year(date),
+         month_year = as.Date(make_date(year, month)))
+
+# calculate deviation from PV data 
+mean <- mean(n2$max_t_days15) # get mean of palo verde data
+
+m2 <- m1 %>%
+  mutate(difference = temp - mean) %>% #find distance from mean
+  mutate(square = difference ^2)  # square distance
+
+sum <- sum(m2$square) # sum the distances
+
+deviation <- sum/16103 # find deviation from mean of palo verde data 
+
+m3 <- m2 %>%
+  mutate(adj_temp = temp + deviation)
+
+# Count of days over 30 C
+count_1980_2014 <- m3 %>%
+  filter(year < 2014) %>%
+  filter(adj_temp >= 30) %>%
+  summarize(total_rows = n()) # 2311 days 
+
+2311/12419 # 18 percent of days above 30 C
+
+count_2014_2024 <- m3 %>%
+  filter(year > 2014) %>%
+  filter(adj_temp >= 30) %>%
+  summarize(total_rows = n()) # 1127 days 
+
+1127/3319 # 34% of days above 30 C in past decade 
+
+```
+
+## 5b. Build models
+
+```{r}
+
+m_intercept <- lm(adj_temp ~ 1, data = m3)
+
+m_date <- lm(adj_temp ~ date, data = m3)
+summary(m_date)
+
+AICtab(m_intercept, m_date, weights = TRUE)
+
+#extract prediction
+pred_ci <- predict(m_date, interval = "confidence", level = 0.95)
+
+# Add predictions and CI 
+m3$preds <- pred_ci[, "fit"]
+m3$ci_lower <- pred_ci[, "lwr"]
+m3$ci_upper <- pred_ci[, "upr"]
+
+```
+
+## 5c. Plot: Figure 4
+
+```{r}
+
+# adjust data to plot temp observation by month instead of day
+m_month <- m3 %>%
+  group_by(year, month) %>%
+  summarise(mean_month = mean(adj_temp)) %>%
+  mutate(month_year2 = make_date(year, month))
+
+label_colors <- c("black", "black", "black", "#a6000e", "black")
+
+plot <- ggplot(m_month, aes(month_year2, mean_month)) +
+  geom_ribbon(aes(ymax = ifelse(mean_month > 30, mean_month, 30), ymin = 30), fill = "#a6000e") +
+  geom_ribbon(aes(ymax = ifelse(mean_month < 30, mean_month, 30), ymin = -Inf), fill = "#E9EAEC") +
+  geom_line(linewidth = .28) +
+  geom_hline(yintercept = 30, linetype = "dashed", color = "#a6000e", linewidth = .28) +
+  geom_smooth(data = m3, aes(x = month_year, y = preds), color = "black", linewidth = .4) +
+  ylab("Avg max temperature per month (°C)") +
+  theme_minimal() +
+  theme(panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        panel.background = element_blank(),
+        axis.title.x = element_blank(),
+        text = element_text(size = 8, family = "sans"),
+        axis.line = element_line(color = "black", linewidth = .28),
+        axis.text.x = element_text(size = 8, color = "black"),
+        axis.text.y = element_text(size = 8, color = label_colors)) +
+  annotate("text", x = as.Date("2015-01-01"), y = 26.8, label = bquote(beta == 5.05e-05), size = 2.5, color = "black", family = "sans") +
+  annotate("text", x = as.Date("2015-01-01"), y = 26.5, label = "SE = 1.66e-06", size = 2.5, color = "black", family = "sans") 
+
+ggsave("figures/figure_4", plot = plot, device = "pdf", width=14.4, height=8.2, units = "cm", dpi = 1200, colormodel = "rgb")
+
+```
+
+
+# 6. Extended data
+
+## 6a. Plot: Extended data figure 2
+
+Coefficient plot including all model variables. 
+
+```{r}
+
+models_full <- rbind(merge_1, merge_2) %>%
+  filter(term != "(Intercept)")
+ 
+# plot the models 
+
+coef_plot_full <- ggplot(models_full, aes(x = term, y = estimate, color = model)) +
+  geom_hline(yintercept = 0, linetype = "dashed", size = 1, color = "grey") +
+  geom_point(position = position_dodge(width = 0.3), size = 3) +
+  geom_linerange(aes(ymin = conf95.low, ymax = conf95.high),
+                 position = position_dodge(width = 0.3), linewidth = 1) +
+  geom_linerange(aes(ymin = conf50.low, ymax = conf50.high),
+                 position = position_dodge(width = 0.3), linewidth = 2) + 
+  scale_color_manual(values = c("#1b7837", "#762a83")) +
+  ylab("Estimate") +
+  coord_flip() +
+  theme_minimal() +
+  theme(axis.line = element_line(color = "black"),
+              axis.text = element_text(size = 23, color = "black"), 
+              text = element_text(size = 23, color = "black"), 
+              panel.grid.minor = element_blank(),
+              panel.grid.major = element_blank(),
+              legend.position = "none",
+              axis.title.y = element_blank()) +
+  scale_x_discrete(breaks = c('reproPregnant',
+                              'reproM',
+                              'reproLactating',
+                              'reprojuv',
+                              'rain_days4_s',
+                              'poly(age_s, degree = 2)2:max_t_days15_s',  
+                              'poly(age_s, degree = 2)2', 
+                              'poly(age_s, degree = 2)1:max_t_days15_s',
+                              'poly(age_s, degree = 2)1',
+                              'max_t_days15_s',
+                              'groupTenori',
+                              'groupPalmas'),
+                    labels = c("pregnant",
+                               "sex:male",
+                               "lactating",
+                               "juvenile female",
+                               "rain",
+                               expression("Age" ^2 * " * max temp"), 
+                               expression("Age"^2), 
+                               "Age * max temp",
+                               "Age",
+                               "Max temp",
+                               "group: Tenori",
+                               "group: Palmas",
+                               "rain"))
+                               
+                               # add custom legend
+
+coef_plot_full <- coef_plot_full +
+  annotate(geom = "point", x = 2.2, y = -6, shape = 16, size = 5, color = "#762a83") +
+  annotate(geom = "segment", x = 2.2, xend = 2.2, y = -5.7, yend = -6.3, size = 3, color = "#762a83") +
+  annotate(geom = "text", x = 2.2, y = -3.2, label = "m2: ΔAIC = 0.0, ω =  0.975 ", size = 5) +
+  
+  annotate(geom = "point", x = 1.8, y = -6, shape = 16, size = 5, color = "#1b7837") +
+  annotate(geom = "segment", x = 1.8, xend = 1.8, y = -5.7, yend = -6.3, size = 3, color = "#1b7837") +
+  annotate(geom = "text", x = 1.8, y = -3.2, label = "m1: ΔAIC = 7.3, ω =  0.025", size = 5) 
+
+
+tiff(file="figures/figure_S2", width=10, height=8, units="in", res=500)
+
+
+coef_plot_full
+
+
+dev.off()
+
+
+```
+
+
+## 6b. Analysis with oldest individual included
+
+### 6b i. GAM results 
+
+```{r}
+
+# prep full data 
+
+n_full <- n %>%
+  filter(neo_nmol_SG <= value_2std_above_mean) %>%
+  mutate(across(c(max_t_days1:rain_days4, age), my_scale, .names = "{.col}_s"),
+         ID = as.factor(ID),
+         group = as.factor(group))
+
+# create model
+
+m_gam_full <- gam(neo_nmol_SG ~ s(age_s) + group + s(max_t_days15_s) + s(ID, bs = "re"),
+             data = n_full,
+             method = "REML",
+             family = Gamma(link = "log"))
+
+# compare model results 
+
+variables <- c("s(age_s)", "s(max_t_days15_s)", "s(ID)")
+
+full <- tidy(m_gam_full) %>%
+  select(edf, ref.df, statistic) %>%
+  mutate(model = "gam_full") %>%
+  cbind(variables) %>%
+  mutate('R-sq' = 0.395) %>%
+  select(variables, edf, ref.df, statistic, model, 'R-sq') %>%
+  filter(variables != "s(ID)") %>%
+  mutate(variables = case_when(variables == 's(age_s)' ~ 'spline: age',
+                          variables == 's(max_t_days15_s)' ~ 'spline: max temp')) 
+
+gam_comparison <- tidy(m_gam) %>%
+  select(edf, ref.df, statistic) %>%
+  mutate(model = "gam_filtered") %>%
+  cbind(variables) %>%
+  mutate('R-sq' = 0.364) %>%
+  select(model, variables, edf, ref.df, statistic, 'R-sq') %>%
+  filter(variables != "s(ID)") %>%
+  mutate(variables = case_when(variables == 's(age_s)' ~ 'spline: age',
+                          variables == 's(max_t_days15_s)' ~ 'spline: max temp')) %>%
+  rbind(full) %>%
+  mutate(edf = round(edf, 2),
+         ref.df = round(ref.df, 2),
+         statistic = round(statistic, 2))
+ 
+
+# make table
+
+gam_comparison_table <- gam_comparison  %>%
+  flextable() %>%
+  hline(i = 2) %>%
+  vline(j = 1, part = "body") %>%
+  merge_v(j = c(1, 6)) %>%
+  fix_border_issues() %>%
+  bold(i = 1, part = "header")
+
+print(gam_comparison_table, preview = "docx")
+
+```
+
+### 6b ii GLMM results
+
+```{r}
+
+# rebuild models with full dataset
+ctrl <- glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 1750)) # up iterations for model to converge
+
+glmm_0_full <- glmer(neo_nmol_SG ~ group + poly(age_s, degree = 2) + rain_days4_s + repro + (1|ID),
+                data = n_full,
+                family = Gamma(link = "log"))
+
+glmm_1_full <- glmer(neo_nmol_SG ~ group + poly(age_s, degree = 2) + rain_days4_s + max_t_days15_s + (1|ID),
+                data = n_full,
+                family = Gamma(link = "log"),
+                 control = ctrl)
+
+glmm_2_full <- glmer(neo_nmol_SG ~ group + poly(age_s, degree = 2) * max_t_days15_s + rain_days4_s + (1|ID),
+                data = n_full,
+                family = Gamma(link = "log"),
+                 control = ctrl)
+
+AICctab(glmm_0_full, glmm_1_full, glmm_2_full, weights = TRUE)
+
+# compare AICc
+
+aic_filtered <- as.data.frame(AICctab(glmm_1, glmm_2, weights = TRUE)) %>%
+  rownames_to_column("model") %>%
+  mutate(weight = weight * 100) %>%
+  mutate(weight = round(weight, 2)) %>%
+  mutate(dAICc = round(dAICc, 2)) %>%
+   mutate(model = case_when(model == 'glmm_1' ~ 'glmm_1_filtered',
+                          model == 'glmm_2' ~ 'glmm_2_filtered'))
+
+aic_comparison <- as.data.frame(AICctab(glmm_1_full, glmm_2_full, weights = TRUE)) %>%
+  rownames_to_column("model") %>%
+  mutate(weight = weight * 100) %>%
+  mutate(weight = round(weight, 2)) %>%
+  mutate(dAICc = round(dAICc, 2)) %>%
+  rbind(aic_filtered)
+
+# make table
+
+aic_comparison_table <- aic_comparison %>%
+  flextable() %>%
+  hline(i = 2) %>%
+  vline(j = 1, part = "body") %>%
+  bold(i = 1, part = "header")
+
+print(aic_comparison_table, preview = "docx")
+
+
+# compare main results of best fitting models
+
+glmm_2_full_summary <- tidy(glmm_2_full) %>%
+  select(term, estimate, std.error) %>%
+   mutate(model = "glmm_2_full")
+
+glmm_2_filtered_summary <- tidy(glmm_2) %>%
+  select(term, estimate, std.error) %>%
+   mutate(model = "glmm_2_filered") %>% 
+  filter(term != "reprojuv" & term != "reproLactating" & term != "reproM" & term != "reproPregnant")
+
+
+glmm_2_comparison <- rbind(glmm_2_full_summary, glmm_2_filtered_summary) %>%
+  filter(!is.na(std.error)) %>% # remove intercept and random effect rows 
+  filter(term %in% c('max_t_days15_s', 'poly(age_s, degree = 2)2', 'poly(age_s, degree = 2)2:max_t_days15_s', "rain_days4_s")) %>%
+  mutate(term = case_when(term == 'rain_days4_s' ~ "Rain",
+                          term == 'max_t_days15_s' ~ 'max temp',
+                          term == 'poly(age_s, degree = 2)2' ~ "Age squared",
+                          term == 'poly(age_s, degree = 2)2:max_t_days15_s' ~ "Age squared * max temp")) %>%
+  mutate(estimate = round(estimate, 2),
+         std.error = round(std.error, 2)) %>%
+  rename(predictor = term) %>%
+  select(model, predictor, estimate, std.error)
+
+
+# make table 
+
+glmm_2_comparison_table <- glmm_2_comparison %>%
+  flextable() %>%
+  hline(i = 4) %>%
+  vline(j = 1, part = "body") %>%
+  bold(i = 1, part = "header")
+
+print(glmm_2_comparison_table, preview = "docx")
+
+```
+
+
+## 6c. Extended data table 4
+
+Results from all three GLMM's 
+
+```{r}
+
+# make dataframe with AIC results 
+
+aic <- as.data.frame(AICctab(glmm_0, glmm_1, glmm_2, weights = TRUE)) %>%
+  rownames_to_column("model") %>%
+  mutate(weight = weight * 100) %>%
+  mutate(weight = round(weight, 2))
+
+# Make dataframe with model results
+
+m0_summary <- tidy(glmm_0) %>%
+  select(term, estimate, std.error) %>%
+   mutate(model = "glmm_0")
+
+m1_summary <- tidy(glmm_1) %>%
+  select(term, estimate, std.error) %>%
+   mutate(model = "glmm_1")
+
+m2_summary <- tidy(glmm_2) %>%
+  select(term, estimate, std.error) %>%
+   mutate(model = "glmm_2")
+
+
+m_summary <- rbind(m1_summary, m2_summary) %>%
+  filter(!is.na(std.error)) %>% # remove intercept and random effect rows 
+  filter(term != "(Intercept)") %>%
+  mutate(term = case_when(term == 'groupPalmas' ~ 'group: Palmas',
+                          term == 'groupTenori' ~ 'group: Tenori',
+                          term == 'poly(age_s, degree = 2)1' ~ 'Age',
+                          term == 'max_t_days15_s' ~ 'max temp',
+                          term == 'poly(age_s, degree = 2)2' ~ "Age squared",
+                          term == 'poly(age_s, degree = 2)1:max_t_days15_s' ~ "Age * max temp",
+                          term == 'poly(age_s, degree = 2)2:max_t_days15_s' ~ "Age squared * max temp",
+                          term == 'rain_days4_s' ~ "Rain",
+                          term == 'reprojuv' ~ 'Juvenile female',
+                          term == 'reproLactating' ~ 'Lactating',
+                          term == 'reproM' ~ 'Sex:Male',
+                          term == 'reproPregnant' ~ "Pregnant")) %>%
+  left_join(aic, by = "model") %>%
+  mutate(dAIC = round(dAICc, 2),
+         estimate = round(estimate, 2),
+         std.error = round(std.error, 2)) %>%
+  rename(predictor = term) %>%
+  select(model, predictor, estimate, std.error, dAICc, df, weight)
+  
+# make a flex table
+                          
+m_table <- m_summary %>%
+  flextable() %>%
+  merge_v(j = c(1, 5, 6, 7)) %>%
+  valign(j = c(1, 5, 6, 7), valign = "top") %>%
+  fix_border_issues() %>%
+  hline(i = 9) %>%
+  vline(j = c(1, 4), part = "body") %>%
+  width(j = 2, width = 2) %>%
+  bold(i = 1, part = "header")
+
+print(m_table, preview = "docx")
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
