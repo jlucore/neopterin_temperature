@@ -1,4 +1,4 @@
-All code and data needed to run the analysis and create the figures for Lucore et al. Breakdown of immune function at high temperatures in a wild primate
+All code and data needed to run the analysis and create the figures for Lucore et al. High temperatures are associated with decreased immune system performance in a wild primate
 
 1. System requirements
    a. The materials require R version 4.3.1 or up
